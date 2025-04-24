@@ -2,24 +2,25 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 
 /// Service that handles deep links
 class DeepLinkService {
   static StreamSubscription? _deepLinkSubscription;
   static String? _pendingDeepLink;
+  static final AppLinks _appLinks = AppLinks();
   
   /// Get the initial deep link if app was opened with one
   static Future<void> initDeepLinks(InAppWebViewController? controller) async {
     try {
       // Get initial URI which may have launched the app
-      final initialUri = await getInitialUri();
+      final initialUri = await _appLinks.getInitialAppLink();
       if (initialUri != null) {
         _handleDeepLink(initialUri, controller);
       }
       
       // Listen for subsequent URI events (when app is in foreground)
-      _deepLinkSubscription = uriLinkStream.listen((Uri? uri) {
+      _deepLinkSubscription = _appLinks.uriLinkStream.listen((Uri? uri) {
         if (uri != null) {
           _handleDeepLink(uri, controller);
         }
