@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flutter WebView Bridge Example</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        color: #333;
+      }
+      .section {
+        margin-bottom: 20px;
+        padding: 15px;
+        border-radius: 8px;
+        background-color: #f5f5f5;
+      }
+      button {
+        background-color: #4caf50;
+        border: none;
+        color: white;
+        padding: 8px 16px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 14px;
+        margin: 4px 2px;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      #logs {
+        background-color: #f0f0f0;
+        border: 1px solid #ddd;
+        padding: 10px;
+        height: 150px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Flutter WebView Bridge Example</h1>
+
+    <div class="section">
+      <h2>Message Bus (JS ↔ Dart)</h2>
+      <input
+        type="text"
+        id="messageInput"
+        placeholder="Enter message to send to Flutter"
+      />
+      <button onclick="sendToFlutter()">Send to Flutter</button>
+    </div>
+
+    <div class="section">
+      <h2>Geolocation</h2>
+      <button onclick="getLocation()">Get Current Location</button>
+      <div id="locationData"></div>
+    </div>
+
+    <div class="section">
+      <h2>Clipboard</h2>
+      <input type="text" id="clipboardInput" placeholder="Text to copy" />
+      <button onclick="copyToClipboard()">Copy to Clipboard</button>
+      <button onclick="readFromClipboard()">Read from Clipboard</button>
+    </div>
+
+    <div class="section">
+      <h2>File Upload</h2>
+      <input type="file" id="fileInput" multiple />
+      <div id="fileInfo"></div>
+    </div>
+
+    <div class="section">
+      <h2>Event Logs</h2>
+      <div id="logs"></div>
+      <button onclick="clearLogs()">Clear Logs</button>
+    </div>
+
+    <script>
+      // Message Bus
+      function sendToFlutter() {
+        const message = document.getElementById("messageInput").value;
+        if (message) {
+          try {
+            window.flutter_inappwebview
+              .callHandler("native", {
+                type: "message",
+                data: message,
+              })
+              .then((response) => {
+                logEvent(`Response from Flutter: ${JSON.stringify(response)}`);
+              });
+          } catch (e) {
+            logEvent("Error sending to Flutter: " + e);
+          }
+        }
+      }
+
+      // Listen for messages from Flutter
+      window.addEventListener("DOMContentLoaded", () => {
+        // This function will be injected by Flutter
+        logEvent("Web page loaded, waiting for Flutter bridge...");
+      });
+
+      // The function is injected by Flutter
+      if (typeof window.postMessageFromFlutter !== "function") {
+        window.postMessageFromFlutter = function (msg) {
+          logEvent("Message from Flutter: " + JSON.stringify(msg));
+        };
+      }
+
+      // Location
+      async function getLocation() {
+        try {
+          if (window.getNativeLocation) {
+            const locationData = await window.getNativeLocation(true);
+            document.getElementById(
+              "locationData"
+            ).textContent = `Lat: ${locationData.latitude}, Lng: ${locationData.longitude}`;
+            logEvent(`Got location: ${JSON.stringify(locationData)}`);
+          } else {
+            logEvent("Native location API not available");
+          }
+        } catch (e) {
+          logEvent("Error getting location: " + e);
+        }
+      }
+
+      // Clipboard
+      async function copyToClipboard() {
+        const text = document.getElementById("clipboardInput").value;
+        if (text) {
+          try {
+            if (window.nativeClipboard) {
+              const result = await window.nativeClipboard.writeText(text);
+              logEvent(
+                `Copied to clipboard: ${text}, Result: ${JSON.stringify(
+                  result
+                )}`
+              );
+            } else {
+              logEvent("Native clipboard API not available");
+            }
+          } catch (e) {
+            logEvent("Error copying to clipboard: " + e);
+          }
+        }
+      }
+
+      async function readFromClipboard() {
+        try {
+          if (window.nativeClipboard) {
+            const result = await window.nativeClipboard.readText();
+            document.getElementById("clipboardInput").value = result.text || "";
+            logEvent(`Read from clipboard: ${JSON.stringify(result)}`);
+          } else {
+            logEvent("Native clipboard API not available");
+          }
+        } catch (e) {
+          logEvent("Error reading from clipboard: " + e);
+        }
+      }
+
+      // File Upload
+      document
+        .getElementById("fileInput")
+        .addEventListener("change", function (e) {
+          const files = e.target.files;
+          if (files.length > 0) {
+            let fileInfo = `Selected ${files.length} file(s):<br>`;
+            for (let i = 0; i < files.length; i++) {
+              fileInfo += `${i + 1}. ${files[i].name} (${formatFileSize(
+                files[i].size
+              )})<br>`;
+            }
+            document.getElementById("fileInfo").innerHTML = fileInfo;
+          }
+        });
+
+      function formatFileSize(bytes) {
+        if (bytes === 0) return "0 Bytes";
+        const k = 1024;
+        const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+      }
+
+      // Event listeners for custom events from Flutter
+      window.addEventListener("push", function (e) {
+        logEvent("Push notification received: " + JSON.stringify(e.detail));
+      });
+
+      window.addEventListener("deepLink", function (e) {
+        logEvent("Deep link received: " + JSON.stringify(e.detail));
+      });
+
+      window.addEventListener("appLifecycle", function (e) {
+        logEvent("App lifecycle change: " + JSON.stringify(e.detail));
+      });
+
+      // Logging
+      function logEvent(message) {
+        const logElement = document.getElementById("logs");
+        const timestamp = new Date().toLocaleTimeString();
+        logElement.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+
+      function clearLogs() {
+        document.getElementById("logs").innerHTML = "";
+      }
+
+      // Log errors to Flutter
+      window.addEventListener("error", function (event) {
+        logEvent(
+          `Error: ${event.message} at ${event.filename}:${event.lineno}`
+        );
+        return false;
+      });
+
+      // Log page load
+      window.addEventListener("load", function () {
+        logEvent("Page fully loaded");
+      });
+    </script>
+  </body>
+</html>
